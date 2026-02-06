@@ -1,0 +1,8 @@
+name = "open-bookmark"
+main = "src/index.ts"
+compatibility_date = "2024-05-29"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "open-bookmark-db"
+database_id = "0c112ed8-4e6f-47b5-9017-c5a066972ec9"

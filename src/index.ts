@@ -13,6 +13,26 @@ type Bookmark = {
   created_at: string
 }
 
+// HTMLエスケープ関数
+const escapeHtml = (str: string): string => {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+// URL検証（http/httpsのみ許可）
+const isValidUrl = (url: string): boolean => {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 const app = new Hono<{ Bindings: Bindings }>()
 
 const html = (bookmarks: Bookmark[], query = '', isAdmin = false) => `<!DOCTYPE html>
@@ -60,7 +80,7 @@ const html = (bookmarks: Bookmark[], query = '', isAdmin = false) => `<!DOCTYPE 
   </div>
 
   <form class="search" action="/" method="get">
-    <input type="text" name="q" placeholder="検索..." value="${query}">
+    <input type="text" name="q" placeholder="検索..." value="${escapeHtml(query)}">
     <button type="submit">検索</button>
   </form>
 
@@ -78,12 +98,12 @@ const html = (bookmarks: Bookmark[], query = '', isAdmin = false) => `<!DOCTYPE 
     ${bookmarks.map(b => `
       <li>
         <div>
-          <a href="${b.url}" target="_blank">${b.title}</a>
-          <div class="info">${b.url}</div>
+          <a href="${escapeHtml(b.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(b.title)}</a>
+          <div class="info">${escapeHtml(b.url)}</div>
         </div>
         ${isAdmin ? `
         <div class="actions">
-          <button class="edit" onclick="editBookmark(${b.id}, '${b.title.replace(/'/g, "\\'")}', '${b.url}')">編集</button>
+          <button class="edit" data-id="${b.id}" data-title="${escapeHtml(b.title)}" data-url="${escapeHtml(b.url)}" onclick="editBookmark(this)">編集</button>
           <form action="/bookmarks/${b.id}/delete" method="post" style="display:inline">
             <button class="delete" type="submit">削除</button>
           </form>
@@ -95,7 +115,10 @@ const html = (bookmarks: Bookmark[], query = '', isAdmin = false) => `<!DOCTYPE 
 
   ${isAdmin ? `
   <script>
-    function editBookmark(id, title, url) {
+    function editBookmark(btn) {
+      var id = btn.dataset.id;
+      var title = btn.dataset.title;
+      var url = btn.dataset.url;
       document.getElementById('editId').value = id;
       document.getElementById('title').value = title;
       document.getElementById('url').value = url;
@@ -208,9 +231,13 @@ app.post('/bookmarks', async (c) => {
     return c.redirect('/login')
   }
   const body = await c.req.parseBody()
+  const url = String(body.url)
+  if (!isValidUrl(url)) {
+    return c.text('無効なURLです（http/httpsのみ許可）', 400)
+  }
   await c.env.DB.prepare(
     'INSERT INTO bookmarks (title, url) VALUES (?, ?)'
-  ).bind(body.title, body.url).run()
+  ).bind(body.title, url).run()
 
   return c.redirect('/')
 })
@@ -222,9 +249,13 @@ app.post('/bookmarks/:id', async (c) => {
   }
   const id = c.req.param('id')
   const body = await c.req.parseBody()
+  const url = String(body.url)
+  if (!isValidUrl(url)) {
+    return c.text('無効なURLです（http/httpsのみ許可）', 400)
+  }
   await c.env.DB.prepare(
     'UPDATE bookmarks SET title = ?, url = ? WHERE id = ?'
-  ).bind(body.title, body.url, id).run()
+  ).bind(body.title, url, id).run()
 
   return c.redirect('/')
 })
